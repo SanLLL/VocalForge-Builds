@@ -1,0 +1,61 @@
+name: Private VocalForge Windows build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-vocalforge-windows
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Compile and test private Windows candidate
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - name: Load public build scripts
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.0'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          archives: qtbase qttools qtsvg
+          modules: qtmultimedia
+          cache: false
+
+      - name: Retrieve private source snapshot
+        id: source
+        shell: pwsh
+        env:
+          VF_PRIVATE_REPO: ${{ secrets.VF_PRIVATE_REPO }}
+          VF_SOURCE_TOKEN: ${{ secrets.VF_SOURCE_TOKEN }}
+        run: .\scripts\fetch-private.ps1
+
+      - name: Build, test, package (logs kept private)
+        id: build
+        continue-on-error: true
+        shell: pwsh
+        run: .\scripts\build-private.ps1
+
+      - name: Deliver only to private repository
+        if: ${{ always() && steps.source.outcome == 'success' }}
+        shell: pwsh
+        env:
+          VF_PRIVATE_REPO: ${{ secrets.VF_PRIVATE_REPO }}
+          VF_DELIVERY_TOKEN: ${{ secrets.VF_DELIVERY_TOKEN }}
+          VF_BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: .\scripts\deliver-private.ps1
+
+      - name: Report private build failure
+        if: ${{ always() && steps.build.outcome != 'success' }}
+        shell: pwsh
+        run: throw 'Windows build failed. Detailed logs are stored in the private VocalForge release, when delivery succeeded.'
