@@ -5,6 +5,7 @@ $source = Join-Path $env:GITHUB_WORKSPACE 'private-source'
 $logs = Join-Path $env:RUNNER_TEMP 'vf-private-diagnostics'
 $packages = Join-Path $env:RUNNER_TEMP 'vf-private-packages'
 New-Item -ItemType Directory -Path $logs, $packages -Force | Out-Null
+$script:lastOperation = 'initialization'
 
 function Invoke-Quiet {
     param(
@@ -12,6 +13,7 @@ function Invoke-Quiet {
         [Parameter(Mandatory=$true)][string]$Executable,
         [string[]]$Arguments = @()
     )
+    $script:lastOperation = $Name
     $logFile = Join-Path $logs "$Name.log"
     & $Executable @Arguments *> $logFile
     $status = $LASTEXITCODE
@@ -26,13 +28,26 @@ function Invoke-PrivateTest {
         [Parameter(Mandatory=$true)][string]$Executable,
         [Parameter(Mandatory=$true)][string]$Argument
     )
+    $script:lastOperation = $Name
     $out = Join-Path $logs "$Name.stdout.txt"
     $err = Join-Path $logs "$Name.stderr.txt"
-    $process = Start-Process -FilePath $Executable -ArgumentList $Argument `
-        -Wait -PassThru -NoNewWindow `
-        -RedirectStandardOutput $out -RedirectStandardError $err
+    $previousQtLogging = $env:QT_FORCE_STDERR_LOGGING
+    $env:QT_FORCE_STDERR_LOGGING = '1'
+    try {
+        $process = Start-Process -FilePath $Executable -ArgumentList $Argument `
+            -Wait -PassThru -NoNewWindow `
+            -RedirectStandardOutput $out -RedirectStandardError $err
+    } finally {
+        if ($null -eq $previousQtLogging) {
+            Remove-Item Env:QT_FORCE_STDERR_LOGGING -ErrorAction SilentlyContinue
+        } else {
+            $env:QT_FORCE_STDERR_LOGGING = $previousQtLogging
+        }
+    }
+    "Exit code: $($process.ExitCode)" |
+        Add-Content -LiteralPath (Join-Path $logs "$Name.status.txt")
     if ($process.ExitCode -ne 0) {
-        throw "$Name failed (exit $($process.ExitCode)). Diagnostics will be delivered privately."
+        throw "$Name failed (exit $($process.ExitCode))."
     }
 }
 
@@ -114,9 +129,12 @@ try {
         Set-Content -LiteralPath (Join-Path $logs 'result.txt')
     Write-Host 'Windows compiler and desktop tests succeeded; private delivery is next.'
 } catch {
-    'Windows build or smoke test failed; see the private diagnostic files.' |
-        Set-Content -LiteralPath (Join-Path $logs 'result.txt')
-    throw 'Private Windows build failed. Diagnostic details will be delivered privately.'
+    @(
+        "Failed stage: $script:lastOperation"
+        "Reason: $($_.Exception.Message)"
+        ($_ | Out-String)
+    ) | Set-Content -LiteralPath (Join-Path $logs 'result.txt')
+    throw "Private Windows build failed at $script:lastOperation. Diagnostic details were saved for private delivery."
 } finally {
     Pop-Location
 }
