@@ -123,8 +123,6 @@ try {
         -DestinationPath (Join-Path $packages "VocalForge-Studio-Windows-x64-v$version.zip") -Force
     Compress-Archive -Path (Join-Path $converterDist '*') `
         -DestinationPath (Join-Path $packages "VocalForge-Voicebank-Converter-Windows-x64-v$version.zip") -Force
-    Copy-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'vf-private-source.zip') `
-        -Destination (Join-Path $packages "VocalForge-Source-v$version.zip") -Force
     "Version: $version; native tests and UI smoke tests passed." |
         Set-Content -LiteralPath (Join-Path $logs 'result.txt')
     Write-Host 'Windows compiler and desktop tests succeeded; private delivery is next.'
