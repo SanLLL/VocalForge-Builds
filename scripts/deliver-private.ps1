@@ -20,7 +20,7 @@ $assets = @($diagZip)
 $state = 'Failed'
 if ($env:VF_BUILD_OUTCOME -eq 'success') {
     $files = @(Get-ChildItem -LiteralPath $packages -Filter '*.zip' -File)
-    if ($files.Count -ne 3) {
+    if ($files.Count -ne 2) {
         throw 'Private package set is incomplete; refusing publication.'
     }
     $assets += $files.FullName
@@ -36,7 +36,7 @@ try {
         --target build-candidate `
         --prerelease --latest=false `
         --title "VocalForge private Windows build $tag" `
-        --notes "$state - internal Windows build. Corresponding source is provided privately with passing build ZIPs." `
+        --notes "$state - internal Windows build. Source is available from GitHub’s built-in release source downloads." `
         *> $privateGhOutput
     if ($LASTEXITCODE -ne 0) {
         throw 'Private release API rejected upload.'
