@@ -10,7 +10,13 @@ $logs = Join-Path $env:RUNNER_TEMP 'vf-private-diagnostics'
 $packages = Join-Path $env:RUNNER_TEMP 'vf-private-packages'
 New-Item -ItemType Directory -Path $logs, $packages -Force | Out-Null
 if (-not (Test-Path (Join-Path $logs 'result.txt'))) {
-    'Build stopped before producing a result; inspect other diagnostic files.' |
+    $stageFile = Join-Path $logs 'current-stage.txt'
+    $stage = if (Test-Path $stageFile) {
+        (Get-Content -LiteralPath $stageFile -Raw).Trim()
+    } else {
+        'unknown'
+    }
+    "Build stopped before producing a result. Last recorded stage: $stage" |
         Set-Content -LiteralPath (Join-Path $logs 'result.txt')
 }
 
