@@ -14,6 +14,7 @@ function Invoke-Quiet {
         [string[]]$Arguments = @()
     )
     $script:lastOperation = $Name
+    Set-Content -LiteralPath (Join-Path $logs 'current-stage.txt') -Value $Name
     $logFile = Join-Path $logs "$Name.log"
     & $Executable @Arguments *> $logFile
     $status = $LASTEXITCODE
@@ -29,14 +30,25 @@ function Invoke-PrivateTest {
         [Parameter(Mandatory=$true)][string]$Argument
     )
     $script:lastOperation = $Name
+    Set-Content -LiteralPath (Join-Path $logs 'current-stage.txt') -Value $Name
     $out = Join-Path $logs "$Name.stdout.txt"
     $err = Join-Path $logs "$Name.stderr.txt"
     $previousQtLogging = $env:QT_FORCE_STDERR_LOGGING
     $env:QT_FORCE_STDERR_LOGGING = '1'
     try {
         $process = Start-Process -FilePath $Executable -ArgumentList $Argument `
-            -Wait -PassThru -NoNewWindow `
+            -PassThru -NoNewWindow `
             -RedirectStandardOutput $out -RedirectStandardError $err
+        $timeoutMinutes = if ($Name -eq 'studio-native') { 10 } else { 4 }
+        if (-not $process.WaitForExit($timeoutMinutes * 60 * 1000)) {
+            try {
+                $process.Kill($true)
+                $process.WaitForExit(10000) | Out-Null
+            } catch {
+                Add-Content -LiteralPath $err -Value $_.Exception.Message
+            }
+            throw "$Name exceeded its $timeoutMinutes-minute test limit."
+        }
     } finally {
         if ($null -eq $previousQtLogging) {
             Remove-Item Env:QT_FORCE_STDERR_LOGGING -ErrorAction SilentlyContinue
